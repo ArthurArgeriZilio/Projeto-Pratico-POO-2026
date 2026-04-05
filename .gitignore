@@ -1,0 +1,6 @@
+bin/
+*.class
+ROTEIRO.txt
+.idea/
+*.iml
+.vscode/
