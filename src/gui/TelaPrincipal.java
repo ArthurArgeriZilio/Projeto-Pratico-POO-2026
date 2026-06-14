@@ -7,6 +7,8 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.*;
+import java.io.File;
+import java.io.PrintWriter;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -16,6 +18,7 @@ public class TelaPrincipal extends JFrame {
 
     private SistemaService service;
     private JTabbedPane abas;
+    private JLabel lblPersistencia;
 
     // tabelas
     private DefaultTableModel modeloClubes;
@@ -63,7 +66,16 @@ public class TelaPrincipal extends JFrame {
         // quando troca de aba, atualiza os combos
         abas.addChangeListener(e -> atualizarCombos());
 
-        add(abas);
+        lblPersistencia = new JLabel(service.getMensagemPersistencia());
+        lblPersistencia.setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 10));
+
+        JPanel conteudo = new JPanel(new BorderLayout());
+        conteudo.add(abas, BorderLayout.CENTER);
+        conteudo.add(lblPersistencia, BorderLayout.SOUTH);
+        add(conteudo);
+
+        atualizarTabelas();
+        atualizarCombos();
     }
 
     // ==================== ABA CLUBES ====================
@@ -97,10 +109,15 @@ public class TelaPrincipal extends JFrame {
                     JOptionPane.showMessageDialog(null, "Preencha todos os campos!");
                     return;
                 }
-                service.cadastrarClube(nome, sigla);
-                modeloClubes.addRow(new Object[]{nome, sigla});
+                String erro = service.cadastrarClube(nome, sigla);
+                if (erro != null) {
+                    JOptionPane.showMessageDialog(null, erro);
+                    return;
+                }
                 txtNome.setText("");
                 txtSigla.setText("");
+                atualizarTabelas();
+                atualizarCombos();
             }
         });
 
@@ -150,9 +167,10 @@ public class TelaPrincipal extends JFrame {
                     JOptionPane.showMessageDialog(null, "Informe o nome!");
                     return;
                 }
-                Campeonato c = service.cadastrarCampeonato(nome);
-                cbCampeonato.addItem(c);
+                service.cadastrarCampeonato(nome);
                 txtNome.setText("");
+                atualizarTabelas();
+                atualizarCombos();
             }
         });
 
@@ -164,11 +182,13 @@ public class TelaPrincipal extends JFrame {
                     JOptionPane.showMessageDialog(null, "Selecione campeonato e clube!");
                     return;
                 }
-                if (!camp.adicionarClube(clube)) {
-                    JOptionPane.showMessageDialog(null, "Campeonato ja tem 8 clubes!");
+                String erro = service.adicionarClubeAoCampeonato(camp, clube);
+                if (erro != null) {
+                    JOptionPane.showMessageDialog(null, erro);
                     return;
                 }
-                modeloCampClubes.addRow(new Object[]{camp.getNome(), clube.getNome()});
+                atualizarTabelas();
+                atualizarCombos();
             }
         });
 
@@ -254,10 +274,14 @@ public class TelaPrincipal extends JFrame {
                     return;
                 }
 
-                Partida partida = new Partida(casa, visitante, dataHora);
-                camp.adicionarPartida(partida);
-                modeloPartidas.addRow(new Object[]{camp.getNome(), casa.getNome(), visitante.getNome(), txtData.getText().trim()});
+                String erro = service.cadastrarPartida(camp, casa, visitante, dataHora);
+                if (erro != null) {
+                    JOptionPane.showMessageDialog(null, erro);
+                    return;
+                }
                 txtData.setText("dd/MM/yyyy HH:mm");
+                atualizarTabelas();
+                atualizarCombos();
             }
         });
 
@@ -310,9 +334,9 @@ public class TelaPrincipal extends JFrame {
                     return;
                 }
                 List<Grupo> grupos = service.getGrupos();
-                Grupo novo = grupos.get(grupos.size() - 1);
-                cbGrupoAdd.addItem(novo);
                 txtNome.setText("");
+                atualizarTabelas();
+                atualizarCombos();
             }
         });
 
@@ -324,11 +348,13 @@ public class TelaPrincipal extends JFrame {
                     JOptionPane.showMessageDialog(null, "Selecione grupo e participante!");
                     return;
                 }
-                if (!grupo.adicionarParticipante(part)) {
-                    JOptionPane.showMessageDialog(null, "Grupo ja tem 5 participantes!");
+                String erro = service.adicionarParticipanteAoGrupo(grupo, part);
+                if (erro != null) {
+                    JOptionPane.showMessageDialog(null, erro);
                     return;
                 }
-                modeloGruposPart.addRow(new Object[]{grupo.getNome(), part.getNome()});
+                atualizarTabelas();
+                atualizarCombos();
             }
         });
 
@@ -369,10 +395,10 @@ public class TelaPrincipal extends JFrame {
                     return;
                 }
                 Participante p = service.cadastrarParticipante(nome, email);
-                modeloParticipantes.addRow(new Object[]{nome, email, p.getTipo()});
-                cbPartGrupo.addItem(p);
                 txtNome.setText("");
                 txtEmail.setText("");
+                atualizarTabelas();
+                atualizarCombos();
             }
         });
 
@@ -445,7 +471,8 @@ public class TelaPrincipal extends JFrame {
                     JOptionPane.showMessageDialog(null, erro);
                     return;
                 }
-                modeloApostas.addRow(new Object[]{part.getNome(), partida.toString(), golsC, golsV});
+                atualizarTabelas();
+                atualizarCombos();
                 JOptionPane.showMessageDialog(null, "Aposta registrada!");
             }
         });
@@ -521,11 +548,8 @@ public class TelaPrincipal extends JFrame {
                     desc = "Empate";
                 }
 
-                modeloResultados.addRow(new Object[]{
-                    partida.getClubeCasa().getSigla() + " vs " + partida.getClubeVisitante().getSigla(),
-                    golsC, golsV, desc
-                });
-                cbPartidaResultado.removeItem(partida);
+                atualizarTabelas();
+                atualizarCombos();
                 JOptionPane.showMessageDialog(null, "Resultado registrado!");
             }
         });
@@ -545,9 +569,11 @@ public class TelaPrincipal extends JFrame {
         form.setBorder(BorderFactory.createTitledBorder("Classificacao do Grupo"));
         cbGrupoClass = new JComboBox<>();
         JButton btnAtualizar = new JButton("Ver Classificacao");
+        JButton btnExportar = new JButton("Exportar CSV");
         form.add(new JLabel("Grupo:"));
         form.add(cbGrupoClass);
         form.add(btnAtualizar);
+        form.add(btnExportar);
 
         modeloClassificacao = new DefaultTableModel(new String[]{"Posicao", "Participante", "Pontuacao"}, 0);
         JTable tabela = new JTable(modeloClassificacao);
@@ -568,9 +594,103 @@ public class TelaPrincipal extends JFrame {
             }
         });
 
+        btnExportar.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                Grupo grupo = (Grupo) cbGrupoClass.getSelectedItem();
+                if (grupo == null) {
+                    JOptionPane.showMessageDialog(null, "Selecione um grupo!");
+                    return;
+                }
+                exportarClassificacao(grupo);
+            }
+        });
+
         painel.add(form, BorderLayout.NORTH);
         painel.add(new JScrollPane(tabela), BorderLayout.CENTER);
         return painel;
+    }
+
+    private void atualizarTabelas() {
+        lblPersistencia.setText(service.getMensagemPersistencia());
+
+        modeloClubes.setRowCount(0);
+        for (Clube clube : service.getClubes()) {
+            modeloClubes.addRow(new Object[]{clube.getNome(), clube.getSigla()});
+        }
+
+        modeloCampClubes.setRowCount(0);
+        modeloPartidas.setRowCount(0);
+        modeloResultados.setRowCount(0);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        for (Campeonato campeonato : service.getCampeonatos()) {
+            for (Clube clube : campeonato.getClubes()) {
+                modeloCampClubes.addRow(new Object[]{campeonato.getNome(), clube.getNome()});
+            }
+            for (Partida partida : campeonato.getPartidas()) {
+                modeloPartidas.addRow(new Object[]{
+                    campeonato.getNome(),
+                    partida.getClubeCasa().getNome(),
+                    partida.getClubeVisitante().getNome(),
+                    partida.getDataHora().format(fmt)
+                });
+                if (partida.isResultadoRegistrado()) {
+                    modeloResultados.addRow(new Object[]{
+                        partida.getClubeCasa().getSigla() + " vs " + partida.getClubeVisitante().getSigla(),
+                        partida.getGolsCasa(),
+                        partida.getGolsVisitante(),
+                        getDescricaoResultado(partida)
+                    });
+                }
+            }
+        }
+
+        modeloGruposPart.setRowCount(0);
+        for (Grupo grupo : service.getGrupos()) {
+            for (Participante participante : grupo.getParticipantes()) {
+                modeloGruposPart.addRow(new Object[]{grupo.getNome(), participante.getNome()});
+            }
+        }
+
+        modeloParticipantes.setRowCount(0);
+        modeloApostas.setRowCount(0);
+        for (Participante participante : service.getParticipantes()) {
+            modeloParticipantes.addRow(new Object[]{participante.getNome(), participante.getEmail(), participante.getTipo()});
+            for (Aposta aposta : participante.getApostas()) {
+                modeloApostas.addRow(new Object[]{
+                    participante.getNome(),
+                    aposta.getPartida().toString(),
+                    aposta.getGolsCasaAposta(),
+                    aposta.getGolsVisitanteAposta()
+                });
+            }
+        }
+    }
+
+    private String getDescricaoResultado(Partida partida) {
+        String resultado = partida.getResultado();
+        if ("CASA".equals(resultado)) {
+            return "Vitoria " + partida.getClubeCasa().getNome();
+        }
+        if ("VISITANTE".equals(resultado)) {
+            return "Vitoria " + partida.getClubeVisitante().getNome();
+        }
+        return "Empate";
+    }
+
+    private void exportarClassificacao(Grupo grupo) {
+        String nomeArquivo = "classificacao_" + grupo.getNome().replaceAll("[^a-zA-Z0-9]", "_") + ".csv";
+        File arquivo = new File(nomeArquivo);
+        try (PrintWriter writer = new PrintWriter(arquivo)) {
+            writer.println("posicao;participante;pontuacao");
+            List<Participante> classificacao = grupo.getClassificacao();
+            for (int i = 0; i < classificacao.size(); i++) {
+                Participante participante = classificacao.get(i);
+                writer.println((i + 1) + ";" + participante.getNome() + ";" + participante.getPontuacaoTotal());
+            }
+            JOptionPane.showMessageDialog(null, "Arquivo gerado: " + arquivo.getAbsolutePath());
+        } catch (Exception ex) {
+            JOptionPane.showMessageDialog(null, "Erro ao exportar classificacao: " + ex.getMessage());
+        }
     }
 
     // ==================== ATUALIZAR COMBOS ====================
@@ -583,26 +703,34 @@ public class TelaPrincipal extends JFrame {
         }
 
         // atualiza campeonatos em todos os combos
+        cbCampeonato.removeAllItems();
         cbCampPartida.removeAllItems();
         cbCampAposta.removeAllItems();
         cbCampResultado.removeAllItems();
         for (int i = 0; i < service.getCampeonatos().size(); i++) {
             Campeonato c = service.getCampeonatos().get(i);
+            cbCampeonato.addItem(c);
             cbCampPartida.addItem(c);
             cbCampAposta.addItem(c);
             cbCampResultado.addItem(c);
         }
 
         // atualiza participantes
+        cbPartGrupo.removeAllItems();
         cbPartAposta.removeAllItems();
         for (int i = 0; i < service.getParticipantes().size(); i++) {
-            cbPartAposta.addItem(service.getParticipantes().get(i));
+            Participante participante = service.getParticipantes().get(i);
+            cbPartGrupo.addItem(participante);
+            cbPartAposta.addItem(participante);
         }
 
         // atualiza grupos
+        cbGrupoAdd.removeAllItems();
         cbGrupoClass.removeAllItems();
         for (int i = 0; i < service.getGrupos().size(); i++) {
-            cbGrupoClass.addItem(service.getGrupos().get(i));
+            Grupo grupo = service.getGrupos().get(i);
+            cbGrupoAdd.addItem(grupo);
+            cbGrupoClass.addItem(grupo);
         }
     }
 }
